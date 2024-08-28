@@ -3,6 +3,8 @@
 #include <math.h>
 #include <stdbool.h>
 #include <SDL2/SDL_ttf.h>
+#include <stdlib.h>
+#include <stdint.h> 
 
 // Screen dimensions
 const int SCREEN_WIDTH = 640;
@@ -24,7 +26,87 @@ typedef struct {
 typedef struct {
     Vec3D position;
     Vec3D velocity;
+    Uint32 color;
+    float radius;
 } Particle;
+
+
+// Function to perform orthogonal projection of vector 'a' onto vector 'b'
+Vec3D orthogonalProjection(Vec3D a, Vec3D b) {
+    float bLengthSquared = b.x * b.x + b.y * b.y + b.z * b.z;
+    float dotProduct = a.x * b.x + a.y * b.y + a.z * b.z;
+    Vec3D projection = {
+        (dotProduct / bLengthSquared) * b.x,
+        (dotProduct / bLengthSquared) * b.y,
+        (dotProduct / bLengthSquared) * b.z
+    };
+    return projection;
+}
+
+Uint32 generateRandomColor() {
+    Uint8 red = rand() % 256;    // Random value between 0 and 255
+    Uint8 green = rand() % 256;  // Random value between 0 and 255
+    Uint8 blue = rand() % 256;   // Random value between 0 and 255
+
+    // Combine the components into a single Uint32 color value (assuming an ARGB format with Alpha = 0xFF)
+    Uint32 color = (0xFF << 24) | (red << 16) | (green << 8) | blue;
+
+    return color;
+}
+
+// Function to subtract vector 'b' from vector 'a'
+Vec3D subVector(Vec3D a, Vec3D b) {
+    Vec3D result = { a.x - b.x, a.y - b.y, a.z - b.z };
+    return result;
+}
+
+// Function to add  vector 'b' to  vector 'a'
+Vec3D addVector(Vec3D a, Vec3D b) {
+    Vec3D result = { a.x + b.x, a.y +  b.y, a.z + b.z };
+    return result;
+}
+
+// Function to handle collision between two particles
+void handleParticleCollision(Particle* p1, Particle* p2) {
+    // Calculate the vector between the centers of the two particles
+    Vec3D collisionDirection = {
+        p2->position.x - p1->position.x,
+        p2->position.y - p1->position.y,
+        p2->position.z - p1->position.z
+    };
+
+    // Calculate the distance squared between the two particles
+    float distanceSquared = 
+        collisionDirection.x * collisionDirection.x +
+        collisionDirection.y * collisionDirection.y +
+        collisionDirection.z * collisionDirection.z;
+
+    // Calculate the sum of the radii squared (assuming radius = 0.1 for both particles)
+    float radiusSum = p1->radius + p2->radius;
+    float radiusSumSquared = radiusSum * radiusSum;
+
+    // Check if the distance is less than the sum of the radii
+    if (distanceSquared <= radiusSumSquared) {
+	    printf("collision!");
+        // Normalize the collision direction
+        float distance = sqrtf(distanceSquared);
+        Vec3D normalizedCollisionDirection = {
+            collisionDirection.x / distance,
+            collisionDirection.y / distance,
+            collisionDirection.z / distance
+        };
+
+        // Project velocities onto the collision direction
+        Vec3D w1 = orthogonalProjection(p1->velocity, normalizedCollisionDirection);
+        Vec3D w2 = orthogonalProjection(p2->velocity, normalizedCollisionDirection);
+        Vec3D u1 = subVector(p1->velocity, w1);
+        Vec3D u2 = subVector(p2->velocity, w2);
+
+        // Swap the velocities along the collision direction
+        p1->velocity = addVector(u1, w2);
+        p2->velocity = addVector(u2, w1);
+    }
+}
 
 // Function to update particle positions and handle collisions
 void updateParticles(Particle* particles, int numParticles, float deltaTime) {
@@ -33,6 +115,13 @@ void updateParticles(Particle* particles, int numParticles, float deltaTime) {
         particles[i].position.x += particles[i].velocity.x * deltaTime;
         particles[i].position.y += particles[i].velocity.y * deltaTime;
         particles[i].position.z += particles[i].velocity.z * deltaTime;
+
+
+    // Handle particle collisions
+        for (int j = i + 1; j < numParticles; j++) {
+            handleParticleCollision(&particles[i], &particles[j]);
+        }
+    
 
         // Check for collision with cube walls and bounce
         if (particles[i].position.x <= -0.5f || particles[i].position.x >= 0.5f)
@@ -43,6 +132,8 @@ void updateParticles(Particle* particles, int numParticles, float deltaTime) {
             particles[i].velocity.z *= -1.0f;
     }
 }
+
+
 
 // Function to apply rotation based on yaw and pitch
 Vec3D rotate(Vec3D point, float pitch, float yaw) {
@@ -95,18 +186,22 @@ void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int num
         int x2D, y2D;
         project(camera, particles[i].position, &x2D, &y2D);
         if (x2D >= 0 && x2D < SCREEN_WIDTH && y2D >= 0 && y2D < SCREEN_HEIGHT) {
-            // Adjust radius based on the distance from the camera
+            // Calculate distance from the camera
             float distance = sqrtf(
                 (particles[i].position.x - camera.position.x) * (particles[i].position.x - camera.position.x) +
                 (particles[i].position.y - camera.position.y) * (particles[i].position.y - camera.position.y) +
                 (particles[i].position.z - camera.position.z) * (particles[i].position.z - camera.position.z)
             );
-            int radius = (int)(5 / distance); // scale the sphere size
-            drawFilledCircle(pixels, x2D, y2D, radius, color);
+
+            // Scale the sphere size with limits on radius
+            int radius = (int)(particles[i].radius / (distance + 0.1f)); // Added a small constant to prevent division by zero and extreme scaling
+            if (radius < 2) radius = 2;  // Minimum radius
+            if (radius > 20) radius = 20; // Maximum radius
+
+            drawFilledCircle(pixels, x2D, y2D, radius*2, particles[i].color);
         }
     }
 }
-
 // Function to draw a line between two 3D points
 void drawLine3D(Uint32* pixels, Camera camera, Vec3D p1, Vec3D p2, Uint32 color) {
     int x1, y1, x2, y2;
@@ -137,10 +232,10 @@ void moveCamera(Camera* camera, float forward, float strafe, float vertical) {
 }
 
 // Function to render FPS counter
-void renderFPS(SDL_Renderer* renderer, TTF_Font* font, int fps) {
+void renderCounts(SDL_Renderer* renderer, TTF_Font* font, int fps, int particles) {
     SDL_Color color = {255, 255, 255, 255}; // White color
-    char fpsText[20];
-    snprintf(fpsText, sizeof(fpsText), "FPS: %d", fps);
+    char fpsText[30];
+    snprintf(fpsText, sizeof(fpsText), "FPS: %d Particles: %d", fps, particles);
     
     SDL_Surface* textSurface = TTF_RenderText_Solid(font, fpsText, color);
     if (textSurface == NULL) {
@@ -251,13 +346,15 @@ int main(int argc, char* args[]) {
     SDL_Event e;
  // Create particlesi
  
-    int particlesSpawned = 100;
+    int particlesSpawned = 2;
     int numParticles = 10000;
     Particle particles[numParticles];
     for (int i = 0; i <  particlesSpawned; i++) {
         particles[i].position = (Vec3D){rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f};
-        particles[i].velocity = (Vec3D){(rand() / (float)RAND_MAX - 0.5f) * 0.1f, (rand() / (float)RAND_MAX - 0.5f) * 0.1f, (rand() / (float)RAND_MAX - 0.5f) * 0.1f};
-    }
+        particles[i].velocity = (Vec3D){(rand() / (float)RAND_MAX - 0.5f) * 2.1f, (rand() / (float)RAND_MAX - 0.5f) * 2.1f, (rand() / (float)RAND_MAX - 0.5f) * 2.1f};
+	particles[i].radius = 0.1f;
+	particles[i].color = generateRandomColor();
+    } 
 
     // Main loop
     while (!quit) {
@@ -301,7 +398,9 @@ int main(int argc, char* args[]) {
 	            case SDLK_p:
                         particles[particlesSpawned].position = (Vec3D){rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f};
                         particles[particlesSpawned].velocity = (Vec3D){(rand() / (float)RAND_MAX - 0.5f) * 0.1f, (rand() / (float)RAND_MAX - 0.5f) * 0.1f, (rand() / (float)RAND_MAX - 0.5f) * 0.1f};
-                        particlesSpawned++;
+                        particles[particlesSpawned].radius = 0.1f;
+                        particles[particlesSpawned].color = generateRandomColor();
+		       	particlesSpawned++;
 		       	break;
 		}
             }
@@ -310,9 +409,8 @@ int main(int argc, char* args[]) {
         // Clear the pixel buffer
         SDL_FillRect(surface, NULL, 0x00000000);
 
-       	// Update particles
-        updateParticles(particles, particlesSpawned, 0.016f);
 
+       	// Update particles
         // Draw the cube
         Uint32 color = (255 << 24) | (255 << 16) | (255 << 8) | 255;  // White
         Uint32 redColor = (255 << 16) | (255 << 24);
@@ -323,11 +421,11 @@ int main(int argc, char* args[]) {
         for (int i = 0; i < 12; i++) {
             drawLine3D(pixels, camera, cubeVertices[edges[i][0]], cubeVertices[edges[i][1]], color);
         }
-
+        updateParticles(particles, particlesSpawned, 0.016f);
         // Update the texture with the current pixel buffer
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_RenderCopy(renderer, texture, NULL, NULL);
-        SDL_RenderPresent(renderer);
+      
 
         // Clean up the texture
         SDL_DestroyTexture(texture);
@@ -339,9 +437,9 @@ int main(int argc, char* args[]) {
             fps = frameCount;
             frameCount = 0;
             lastTime = endTime;
-        }        // Render FPS counter
-        renderFPS(renderer, font, fps);
+	}
 
+	renderCounts(renderer, font, fps, particlesSpawned);
         // Present the screen
         SDL_RenderPresent(renderer);
 
