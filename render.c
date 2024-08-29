@@ -9,7 +9,7 @@
 // Screen dimensions
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
-const float viewportDistance = 1.0f;
+const float viewportDistance = 2.0f;
 
 // Structure to represent a 3D point
 typedef struct {
@@ -87,7 +87,7 @@ void handleParticleCollision(Particle* p1, Particle* p2) {
 
     // Check if the distance is less than the sum of the radii
     if (distanceSquared <= radiusSumSquared) {
-	    printf("collision!");
+	    printf("distance Squared: %f radiusSumSquared %f \n", distanceSquared, radiusSumSquared);
         // Normalize the collision direction
         float distance = sqrtf(distanceSquared);
         Vec3D normalizedCollisionDirection = {
@@ -185,6 +185,7 @@ void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int num
     for (int i = 0; i < numParticles; i++) {
         int x2D, y2D;
         project(camera, particles[i].position, &x2D, &y2D);
+
         if (x2D >= 0 && x2D < SCREEN_WIDTH && y2D >= 0 && y2D < SCREEN_HEIGHT) {
             // Calculate distance from the camera
             float distance = sqrtf(
@@ -192,13 +193,16 @@ void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int num
                 (particles[i].position.y - camera.position.y) * (particles[i].position.y - camera.position.y) +
                 (particles[i].position.z - camera.position.z) * (particles[i].position.z - camera.position.z)
             );
+            printf("distance %f \n", distance);
+            // Adjust the sphere size based on distance
+            // Here, we assume a base size and scale it with distance.
+            float scaleFactor = viewportDistance*10 / (distance + 0.1f); // +0.1f to avoid division by zero
 
-            // Scale the sphere size with limits on radius
-            int radius = (int)(particles[i].radius / (distance + 0.1f)); // Added a small constant to prevent division by zero and extreme scaling
-            if (radius < 2) radius = 2;  // Minimum radius
-            if (radius > 20) radius = 20; // Maximum radius
+            int radius = (int)(particles[i].radius * scaleFactor); // Scale radius by distance
+           // if (radius < 2) radius = 2;  // Minimum radius
+           // if (radius > 20) radius = 20; // Maximum radius
 
-            drawFilledCircle(pixels, x2D, y2D, radius*2, particles[i].color);
+            drawFilledCircle(pixels, x2D, y2D, radius, particles[i].color);
         }
     }
 }
