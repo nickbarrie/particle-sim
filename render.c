@@ -87,7 +87,6 @@ void handleParticleCollision(Particle* p1, Particle* p2) {
 
     // Check if the distance is less than the sum of the radii
     if (distanceSquared <= radiusSumSquared) {
-	    printf("distance Squared: %f radiusSumSquared %f \n", distanceSquared, radiusSumSquared);
         // Normalize the collision direction
         float distance = sqrtf(distanceSquared);
         Vec3D normalizedCollisionDirection = {
@@ -193,14 +192,13 @@ void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int num
                 (particles[i].position.y - camera.position.y) * (particles[i].position.y - camera.position.y) +
                 (particles[i].position.z - camera.position.z) * (particles[i].position.z - camera.position.z)
             );
-            printf("distance %f \n", distance);
             // Adjust the sphere size based on distance
             // Here, we assume a base size and scale it with distance.
-            float scaleFactor = viewportDistance*10 / (distance + 0.1f); // +0.1f to avoid division by zero
+            float scaleFactor = viewportDistance*50 / (distance + 0.1f); // +0.1f to avoid division by zero
 
             int radius = (int)(particles[i].radius * scaleFactor); // Scale radius by distance
-           // if (radius < 2) radius = 2;  // Minimum radius
-           // if (radius > 20) radius = 20; // Maximum radius
+	    if (radius < 2) radius = 2;  // Minimum radius
+            if (radius > 50) radius = 50; // Maximum radius
 
             drawFilledCircle(pixels, x2D, y2D, radius, particles[i].color);
         }
