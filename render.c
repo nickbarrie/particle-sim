@@ -6,23 +6,21 @@
 #include <stdlib.h>
 #include <stdint.h> 
 
-// Screen dimensions
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 const float viewportDistance = 2.0f;
 
-// Structure to represent a 3D point
+
 typedef struct {
     float x, y, z;
 } Vec3D;
 
-// Structure to represent a camera
 typedef struct {
     Vec3D position;
     float pitch;  // Rotation around x-axis
     float yaw;    // Rotation around y-axis
 } Camera;
-// Define the structure for a particle
+
 typedef struct {
     Vec3D position;
     Vec3D velocity;
@@ -30,8 +28,9 @@ typedef struct {
     float radius;
 } Particle;
 
+Vec3D lightDir = {0.0f, -1.0f, 1.0f}; // Example: light coming from above and infront
+float lightIntensity = 1.0f; // Maximum light intensity
 
-// Function to perform orthogonal projection of vector 'a' onto vector 'b'
 Vec3D orthogonalProjection(Vec3D a, Vec3D b) {
     float bLengthSquared = b.x * b.x + b.y * b.y + b.z * b.z;
     float dotProduct = a.x * b.x + a.y * b.y + a.z * b.z;
@@ -44,9 +43,9 @@ Vec3D orthogonalProjection(Vec3D a, Vec3D b) {
 }
 
 Uint32 generateRandomColor() {
-    Uint8 red = rand() % 256;    // Random value between 0 and 255
-    Uint8 green = rand() % 256;  // Random value between 0 and 255
-    Uint8 blue = rand() % 256;   // Random value between 0 and 255
+    Uint8 red = rand() % 256;    
+    Uint8 green = rand() % 256;  
+    Uint8 blue = rand() % 256;  
 
     // Combine the components into a single Uint32 color value (assuming an ARGB format with Alpha = 0xFF)
     Uint32 color = (0xFF << 24) | (red << 16) | (green << 8) | blue;
@@ -164,23 +163,43 @@ void project(Camera camera, Vec3D point3D, int* x2D, int* y2D) {
     *y2D = (int)((rotated.y / (rotated.z + viewportDistance)) * SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 2);
 }
 
-    // Function to draw a filled circle
-void drawFilledCircle(Uint32* pixels, int centerX, int centerY, int radius, Uint32 color) {
+// Function to draw a filled circle with simple shading
+void drawFilledCircleWithShading(Uint32* pixels, int centerX, int centerY, int radius, Uint32 color, Camera camera) {
     for (int y = -radius; y <= radius; y++) {
         for (int x = -radius; x <= radius; x++) {
             if (x * x + y * y <= radius * radius) {
                 int drawX = centerX + x;
                 int drawY = centerY + y;
                 if (drawX >= 0 && drawX < SCREEN_WIDTH && drawY >= 0 && drawY < SCREEN_HEIGHT) {
-                    pixels[drawY * SCREEN_WIDTH + drawX] = color;
+
+                    // Calculate the normal at this point on the sphere's surface
+                    Vec3D normal = {x / (float)radius, y / (float)radius, sqrtf(1.0f - (x * x + y * y) / (float)(radius * radius))};
+
+                    // Rotate normal based on camera rotation
+                    Vec3D transformedNormal = rotate(normal, camera.pitch, camera.yaw);
+
+                    // Calculate the dot product of the normal and the light direction
+                    float dot = transformedNormal.x * lightDir.x + transformedNormal.y * lightDir.y + transformedNormal.z * lightDir.z;
+                    if (dot < 0) dot = 0; // Ensure no negative light intensity
+
+		    // Adjust the color intensity based on the dot product and light intensity
+		    Uint8 r = (Uint8)fminf(255.0f, ((color >> 16) & 0xFF) * dot * lightIntensity);
+		    Uint8 g = (Uint8)fminf(255.0f, ((color >> 8) & 0xFF) * dot * lightIntensity);
+		    Uint8 b = (Uint8)fminf(255.0f, (color & 0xFF) * dot * lightIntensity);
+
+                    Uint32 shadedColor = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                    // Combine the new color components
+                  
+
+                    // Set the pixel with the shaded color
+                    pixels[drawY * SCREEN_WIDTH + drawX] = shadedColor;
                 }
             }
         }
     }
 }
-
 // Function to render particles as spheres
-void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int numParticles, Uint32 color) {
+void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int numParticles) {
     for (int i = 0; i < numParticles; i++) {
         int x2D, y2D;
         project(camera, particles[i].position, &x2D, &y2D);
@@ -200,7 +219,7 @@ void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int num
 	    if (radius < 2) radius = 2;  // Minimum radius
             if (radius > 50) radius = 50; // Maximum radius
 
-            drawFilledCircle(pixels, x2D, y2D, radius, particles[i].color);
+        drawFilledCircleWithShading(pixels, x2D, y2D, radius, particles[i].color, camera);
         }
     }
 }
@@ -259,6 +278,13 @@ void renderCounts(SDL_Renderer* renderer, TTF_Font* font, int fps, int particles
     SDL_FreeSurface(textSurface);
 }
 
+void createParticle(Particle* particle, float velocity, Uint32 color){
+	particle->position = (Vec3D){rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f};
+        particle->velocity = (Vec3D){(rand() / (float)RAND_MAX - 0.5f) * velocity, (rand() / (float)RAND_MAX - 0.5f) * velocity, (rand() / (float)RAND_MAX - 0.5f) * velocity};
+        particle->radius = 0.1f;
+        particle->color = color;
+}
+
 
 int main(int argc, char* args[]) {
     // Initialize SDL
@@ -311,10 +337,8 @@ int main(int argc, char* args[]) {
         printf("TTF_OpenFont: %s\n", TTF_GetError());
         return 1;
     }
-    // Get a pointer to the pixel buffer
     Uint32* pixels = (Uint32*)surface->pixels;
 
-    // Define the vertices of a 3D cube
     Vec3D cubeVertices[8] = {
         {-0.5f, -0.5f, -0.5f},
         { 0.5f, -0.5f, -0.5f},
@@ -326,17 +350,14 @@ int main(int argc, char* args[]) {
         {-0.5f,  0.5f,  0.5f}
     };
 
-    // Define the edges of the cube (pairs of vertices)
     int edges[12][2] = {
         {0, 1}, {1, 2}, {2, 3}, {3, 0},  // Back face
         {4, 5}, {5, 6}, {6, 7}, {7, 4},  // Front face
         {0, 4}, {1, 5}, {2, 6}, {3, 7}   // Connecting edges
     };
 
-    // Define the camera
     Camera camera = {{0.0f, 0.0f, -3.0f}, 0.0f, 0.0f};
 
-      // Timing for FPS counter
     Uint32 startTime, endTime, frameCount = 0;
     Uint32 lastTime = SDL_GetTicks();
     int fps = 0;
@@ -346,21 +367,25 @@ int main(int argc, char* args[]) {
     // Main loop flag
     int quit = 0;
     SDL_Event e;
- // Create particlesi
- 
+
+    // Create particles
     int particlesSpawned = 2;
     int numParticles = 10000;
-    Particle particles[numParticles];
+
+    Particle* particles = (Particle*)malloc(numParticles * sizeof(Particle));
+
+    if (particles == NULL) {
+    fprintf(stderr, "Memory allocation failed!\n");
+    return 1;
+    }
+
     for (int i = 0; i <  particlesSpawned; i++) {
-        particles[i].position = (Vec3D){rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f};
-        particles[i].velocity = (Vec3D){(rand() / (float)RAND_MAX - 0.5f) * 2.1f, (rand() / (float)RAND_MAX - 0.5f) * 2.1f, (rand() / (float)RAND_MAX - 0.5f) * 2.1f};
-	particles[i].radius = 0.1f;
-	particles[i].color = generateRandomColor();
+	    createParticle(&particles[i], 2.0f, generateRandomColor());
     } 
 
     // Main loop
     while (!quit) {
-        startTime = SDL_GetTicks();  // Get the start time of the frame        // Handle events
+        startTime = SDL_GetTicks();
       
       	while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) {
@@ -368,16 +393,16 @@ int main(int argc, char* args[]) {
             } else if (e.type == SDL_KEYDOWN) {
                 switch (e.key.keysym.sym) {
                     case SDLK_LEFT:
-                        camera.yaw += 0.1f;  // Rotate left
+                        camera.yaw -= 0.1f;  // Rotate left
                         break;
                     case SDLK_RIGHT:
-                        camera.yaw -= 0.1f;  // Rotate right
+                        camera.yaw += 0.1f;  // Rotate right
                         break;
                     case SDLK_UP:
-                        camera.pitch += 0.1f;  // Rotate up
+                        camera.pitch -= 0.1f;  // Rotate up
                         break;
                     case SDLK_DOWN:
-                        camera.pitch -= 0.1f;  // Rotate down
+                        camera.pitch += 0.1f;  // Rotate down
                         break;
                     case SDLK_w:
                         moveCamera(&camera, 0.1f, 0.0f, 0.0f);  // Move forward
@@ -392,67 +417,49 @@ int main(int argc, char* args[]) {
                         moveCamera(&camera, 0.0f, 0.1f, 0.0f);  // Strafe right
                         break;
 		    case SDLK_SPACE:
-			moveCamera(&camera, 0.0f,0.0f, -0.1f);
+			moveCamera(&camera, 0.0f,0.0f, -0.1f);  // Move up
 			break;
 		    case SDLK_z:
-			moveCamera(&camera, 0.0f, 0.0f, 0.1f);
+			moveCamera(&camera, 0.0f, 0.0f, 0.1f);  // Move down
 			break;
-	            case SDLK_p:
-                        particles[particlesSpawned].position = (Vec3D){rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f};
-                        particles[particlesSpawned].velocity = (Vec3D){(rand() / (float)RAND_MAX - 0.5f) * 0.1f, (rand() / (float)RAND_MAX - 0.5f) * 0.1f, (rand() / (float)RAND_MAX - 0.5f) * 0.1f};
-                        particles[particlesSpawned].radius = 0.1f;
-                        particles[particlesSpawned].color = generateRandomColor();
-		       	particlesSpawned++;
+	            case SDLK_p:  // Spawn particle
+		       	createParticle(&particles[particlesSpawned], 2.0f, generateRandomColor());
+			particlesSpawned++;
 		       	break;
 		}
             }
         }
 
-        // Clear the pixel buffer
         SDL_FillRect(surface, NULL, 0x00000000);
 
 
-       	// Update particles
-        // Draw the cube
         Uint32 color = (255 << 24) | (255 << 16) | (255 << 8) | 255;  // White
-        Uint32 redColor = (255 << 16) | (255 << 24);
-        // Render the particles
-        renderParticles(pixels, camera, particles, particlesSpawned, redColor);
+       
 
-        // Draw the cube
-        for (int i = 0; i < 12; i++) {
-            drawLine3D(pixels, camera, cubeVertices[edges[i][0]], cubeVertices[edges[i][1]], color);
+        int cubeEdges = 12;	
+        for (int lineNumber = 0; lineNumber < cubeEdges; lineNumber++) {
+            drawLine3D(pixels, camera, cubeVertices[edges[lineNumber][0]], cubeVertices[edges[lineNumber][1]], color);
         }
+
+	renderParticles(pixels, camera, particles, particlesSpawned);
         updateParticles(particles, particlesSpawned, 0.016f);
-        // Update the texture with the current pixel buffer
+        
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_RenderCopy(renderer, texture, NULL, NULL);
       
-
-        // Clean up the texture
         SDL_DestroyTexture(texture);
 
 	frameCount++;
-    // Update FPS counter every second
         endTime = SDL_GetTicks();
         if (endTime - lastTime >= 1000) {
             fps = frameCount;
             frameCount = 0;
             lastTime = endTime;
 	}
-
 	renderCounts(renderer, font, fps, particlesSpawned);
-        // Present the screen
+        
         SDL_RenderPresent(renderer);
 
-        // Update FPS counter every second
-        endTime = SDL_GetTicks();
-        if (endTime - lastTime >= 1000) {
-            fps = frameCount;
-            frameCount = 0;
-            lastTime = endTime;
-        }
-        // Delay to control frame rate
         SDL_Delay(16);
     }
 
@@ -461,7 +468,7 @@ int main(int argc, char* args[]) {
     SDL_DestroyWindow(window);
     TTF_Quit();
     SDL_Quit();
-
+    free(particles);
     return 0;
 }
 
