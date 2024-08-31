@@ -65,7 +65,6 @@ Vec3D addVector(Vec3D a, Vec3D b) {
     return result;
 }
 
-// Function to handle collision between two particles
 void handleParticleCollision(Particle* p1, Particle* p2) {
     // Calculate the vector between the centers of the two particles
     Vec3D collisionDirection = {
@@ -75,12 +74,12 @@ void handleParticleCollision(Particle* p1, Particle* p2) {
     };
 
     // Calculate the distance squared between the two particles
-    float distanceSquared = 
+    float distanceSquared =
         collisionDirection.x * collisionDirection.x +
         collisionDirection.y * collisionDirection.y +
         collisionDirection.z * collisionDirection.z;
 
-    // Calculate the sum of the radii squared (assuming radius = 0.1 for both particles)
+    // Calculate the sum of the radii squared
     float radiusSum = p1->radius + p2->radius;
     float radiusSumSquared = radiusSum * radiusSum;
 
@@ -94,6 +93,15 @@ void handleParticleCollision(Particle* p1, Particle* p2) {
             collisionDirection.z / distance
         };
 
+        // Calculate overlap and separate the particles
+        float overlap = radiusSum - distance;
+        p1->position.x -= normalizedCollisionDirection.x * overlap * 0.5f;
+        p1->position.y -= normalizedCollisionDirection.y * overlap * 0.5f;
+        p1->position.z -= normalizedCollisionDirection.z * overlap * 0.5f;
+        p2->position.x += normalizedCollisionDirection.x * overlap * 0.5f;
+        p2->position.y += normalizedCollisionDirection.y * overlap * 0.5f;
+        p2->position.z += normalizedCollisionDirection.z * overlap * 0.5f;
+
         // Project velocities onto the collision direction
         Vec3D w1 = orthogonalProjection(p1->velocity, normalizedCollisionDirection);
         Vec3D w2 = orthogonalProjection(p2->velocity, normalizedCollisionDirection);
@@ -106,7 +114,6 @@ void handleParticleCollision(Particle* p1, Particle* p2) {
     }
 }
 
-// Function to update particle positions and handle collisions
 void updateParticles(Particle* particles, int numParticles, float deltaTime) {
     for (int i = 0; i < numParticles; i++) {
         // Update position based on velocity
@@ -114,20 +121,35 @@ void updateParticles(Particle* particles, int numParticles, float deltaTime) {
         particles[i].position.y += particles[i].velocity.y * deltaTime;
         particles[i].position.z += particles[i].velocity.z * deltaTime;
 
-
-    // Handle particle collisions
+        // Handle particle collisions
         for (int j = i + 1; j < numParticles; j++) {
             handleParticleCollision(&particles[i], &particles[j]);
         }
-    
 
         // Check for collision with cube walls and bounce
-        if (particles[i].position.x <= -0.5f || particles[i].position.x >= 0.5f)
+        if (particles[i].position.x <= -0.5f) {
+            particles[i].position.x = -0.5f;
             particles[i].velocity.x *= -1.0f;
-        if (particles[i].position.y <= -0.5f || particles[i].position.y >= 0.5f)
+        } else if (particles[i].position.x >= 0.5f) {
+            particles[i].position.x = 0.5f;
+            particles[i].velocity.x *= -1.0f;
+        }
+
+        if (particles[i].position.y <= -0.5f) {
+            particles[i].position.y = -0.5f;
             particles[i].velocity.y *= -1.0f;
-        if (particles[i].position.z <= -0.5f || particles[i].position.z >= 0.5f)
+        } else if (particles[i].position.y >= 0.5f) {
+            particles[i].position.y = 0.5f;
+            particles[i].velocity.y *= -1.0f;
+        }
+
+        if (particles[i].position.z <= -0.5f) {
+            particles[i].position.z = -0.5f;
             particles[i].velocity.z *= -1.0f;
+        } else if (particles[i].position.z >= 0.5f) {
+            particles[i].position.z = 0.5f;
+            particles[i].velocity.z *= -1.0f;
+        }
     }
 }
 
@@ -153,14 +175,26 @@ Vec3D rotate(Vec3D point, float pitch, float yaw) {
 // Function to project 3D points to 2D points, considering the camera position and rotation
 void project(Camera camera, Vec3D point3D, int* x2D, int* y2D) {
     // Translate point based on camera position
-    Vec3D translated = { point3D.x - camera.position.x, point3D.y - camera.position.y, point3D.z - camera.position.z };
+    Vec3D translated = {
+        point3D.x - camera.position.x,
+        point3D.y - camera.position.y,
+        point3D.z - camera.position.z
+    };
 
     // Rotate point based on camera rotation (pitch, yaw)
     Vec3D rotated = rotate(translated, camera.pitch, camera.yaw);
 
-    // Project onto 2D viewport
-    *x2D = (int)((rotated.x / (rotated.z + viewportDistance)) * SCREEN_WIDTH / 2 + SCREEN_WIDTH / 2);
-    *y2D = (int)((rotated.y / (rotated.z + viewportDistance)) * SCREEN_HEIGHT / 2 + SCREEN_HEIGHT / 2);
+    // Apply perspective projection with correct FOV and distance scaling
+    float focalLength = 1.0f;  // Controls the field of view
+    float zFactor = (rotated.z + viewportDistance); // Adjust based on how far the object is
+
+    if (zFactor > 0) {
+        *x2D = (int)((focalLength * rotated.x / zFactor) * (SCREEN_WIDTH / 2)) + (SCREEN_WIDTH / 2);
+        *y2D = (int)((focalLength * rotated.y / zFactor) * (SCREEN_HEIGHT / 2)) + (SCREEN_HEIGHT / 2);
+    } else {
+        *x2D = SCREEN_WIDTH / 2;
+        *y2D = SCREEN_HEIGHT / 2;
+    }
 }
 
 // Function to draw a filled circle with simple shading
@@ -213,11 +247,11 @@ void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int num
             );
             // Adjust the sphere size based on distance
             // Here, we assume a base size and scale it with distance.
-            float scaleFactor = viewportDistance*50 / (distance + 0.1f); // +0.1f to avoid division by zero
+            float scaleFactor = viewportDistance*200/  (distance + 0.5f * viewportDistance); // +0.1f to avoid division by zero
 
             int radius = (int)(particles[i].radius * scaleFactor); // Scale radius by distance
-	    if (radius < 2) radius = 2;  // Minimum radius
-            if (radius > 50) radius = 50; // Maximum radius
+//	    if (radius < 5) radius = 5;  // Minimum radius
+  //          if (radius > 100) radius = 100; // Maximum radius
 
         drawFilledCircleWithShading(pixels, x2D, y2D, radius, particles[i].color, camera);
         }
