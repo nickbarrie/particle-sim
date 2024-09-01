@@ -7,6 +7,7 @@ typedef struct {
     float x, y, z;
 } Vec3D;
 
+
 // Function prototypes for vector operations
 Vec3D addVector(Vec3D a, Vec3D b);
 Vec3D subVector(Vec3D a, Vec3D b);

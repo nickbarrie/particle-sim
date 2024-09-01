@@ -25,6 +25,7 @@ typedef struct {
     Vec3D velocity;
     Uint32 color;
     float radius;
+    struct Particle* next;
 } Particle;
 
 Vec3D lightDir = {0.0f, -1.0f, 1.0f}; // Example: light coming from above and infront
@@ -301,20 +302,20 @@ void drawBoxOutline(Uint32* pixels, int x, int y, int width, int height, Uint32 
 }
 
 
-void displayParticleInfo(SDL_Renderer* renderer, TTF_Font* font, Particle* particle, int x, int y) {
+void displayParticleInfo(SDL_Renderer* renderer, TTF_Font* font, Particle particle, int x, int y) {
     SDL_Color color = {255, 255, 255, 255}; // White color
 
     // Prepare strings for each piece of particle information
     char posText[60];
     snprintf(posText, sizeof(posText), "Pos: (%.2f, %.2f, %.2f)", 
-             particle->position.x, particle->position.y, particle->position.z);
+             particle.position.x, particle.position.y, particle.position.z);
 
     char velText[60];
     snprintf(velText, sizeof(velText), "Vel: (%.2f, %.2f, %.2f)", 
-             particle->velocity.x, particle->velocity.y, particle->velocity.z);
+             particle.velocity.x, particle.velocity.y, particle.velocity.z);
 
     char radiusText[40];
-    snprintf(radiusText, sizeof(radiusText), "Radius: %.2f", particle->radius);
+    snprintf(radiusText, sizeof(radiusText), "Radius: %.2f", particle.radius);
 
     // Draw each line of information
     drawText(renderer, font, posText, x + 10 , y + 10, color);           // Position text at (x, y)
@@ -328,6 +329,7 @@ void createParticle(Particle* particle, float velocity, Uint32 color){
         particle->velocity = (Vec3D){(rand() / (float)RAND_MAX - 0.5f) * velocity, (rand() / (float)RAND_MAX - 0.5f) * velocity, (rand() / (float)RAND_MAX - 0.5f) * velocity};
         particle->radius = 0.1f;
         particle->color = color;
+	particle->next = NULL;
 }
 
 
@@ -421,8 +423,6 @@ int main(int argc, char* args[]) {
     int infoBoxWidth = 350;
     int infoBoxHeight = 100;
 
-    int selectedParticle =1;
-
     int cubeEdges = 12;
     Particle* particles = (Particle*)malloc(numParticles * sizeof(Particle));
 
@@ -433,7 +433,14 @@ int main(int argc, char* args[]) {
 
     for (int i = 0; i <  particlesSpawned; i++) {
 	    createParticle(&particles[i], 2.0f, generateRandomColor());
+        if (i > 0) {
+            particles[i-1].next = &particles[i];
+        }
     } 
+
+    particles[particlesSpawned-1].next =  &particles[0];
+
+    Particle* selectedParticle = &particles[0];
 
     // Main loop
     while (!quit) {
@@ -481,6 +488,9 @@ int main(int argc, char* args[]) {
 		    case SDLK_ESCAPE:
 			paused = !paused;
 			break;
+		    case SDLK_n:
+			selectedParticle = selectedParticle->next;
+	                break;
 		}
             }
         }
@@ -497,8 +507,8 @@ int main(int argc, char* args[]) {
 
 	renderParticles(pixels, camera, particles, particlesSpawned);
 
-         if (selectedParticle != -1) {
-                drawBoxOutline(pixels, SCREEN_WIDTH-infoBoxWidth -10, 10, infoBoxWidth, infoBoxHeight, particles[selectedParticle].color, 5);
+         if (selectedParticle->next != NULL) {
+                drawBoxOutline(pixels, SCREEN_WIDTH-infoBoxWidth -10, 10, infoBoxWidth, infoBoxHeight, selectedParticle->color, 5);
         }
 
 	if(!paused){
@@ -520,8 +530,8 @@ int main(int argc, char* args[]) {
       
 
 // for some reason text must go later	
-	if (selectedParticle != -1) {
-                displayParticleInfo(renderer, font, &particles[selectedParticle], SCREEN_WIDTH-infoBoxWidth -10, 10);
+	if (selectedParticle->next != NULL) {
+                displayParticleInfo(renderer, font, *selectedParticle, SCREEN_WIDTH-infoBoxWidth -10, 10);
         }
 
 
