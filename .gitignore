@@ -1,0 +1,20 @@
+# Ignore temporary files created by text editors
+*.swn
+*.swo
+*.swp
+*.swm
+
+# Ignore logs
+logs/
+
+# Ignore files related to Windows Zone Identifier (for files downloaded from the internet)
+*.Zone.Identifier
+
+# Ignore compiled binaries
+renderProgram
+
+# Ignore specific files and directories
+myprogram/
+Consolas.ttf
+StevieWatching-birds.bmp
+

@@ -5,15 +5,14 @@
 #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
 #include <stdint.h> 
+#include "vector.h"
+
 
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 const float viewportDistance = 2.0f;
+bool paused = false;
 
-
-typedef struct {
-    float x, y, z;
-} Vec3D;
 
 typedef struct {
     Vec3D position;
@@ -31,17 +30,6 @@ typedef struct {
 Vec3D lightDir = {0.0f, -1.0f, 1.0f}; // Example: light coming from above and infront
 float lightIntensity = 1.0f; // Maximum light intensity
 
-Vec3D orthogonalProjection(Vec3D a, Vec3D b) {
-    float bLengthSquared = b.x * b.x + b.y * b.y + b.z * b.z;
-    float dotProduct = a.x * b.x + a.y * b.y + a.z * b.z;
-    Vec3D projection = {
-        (dotProduct / bLengthSquared) * b.x,
-        (dotProduct / bLengthSquared) * b.y,
-        (dotProduct / bLengthSquared) * b.z
-    };
-    return projection;
-}
-
 Uint32 generateRandomColor() {
     Uint8 red = rand() % 256;    
     Uint8 green = rand() % 256;  
@@ -51,18 +39,6 @@ Uint32 generateRandomColor() {
     Uint32 color = (0xFF << 24) | (red << 16) | (green << 8) | blue;
 
     return color;
-}
-
-// Function to subtract vector 'b' from vector 'a'
-Vec3D subVector(Vec3D a, Vec3D b) {
-    Vec3D result = { a.x - b.x, a.y - b.y, a.z - b.z };
-    return result;
-}
-
-// Function to add  vector 'b' to  vector 'a'
-Vec3D addVector(Vec3D a, Vec3D b) {
-    Vec3D result = { a.x + b.x, a.y +  b.y, a.z + b.z };
-    return result;
 }
 
 void handleParticleCollision(Particle* p1, Particle* p2) {
@@ -154,23 +130,6 @@ void updateParticles(Particle* particles, int numParticles, float deltaTime) {
 }
 
 
-
-// Function to apply rotation based on yaw and pitch
-Vec3D rotate(Vec3D point, float pitch, float yaw) {
-    Vec3D rotated;
-
-    // Rotate around y-axis (yaw)
-    rotated.x = cosf(yaw) * point.x - sinf(yaw) * point.z;
-    rotated.z = sinf(yaw) * point.x + cosf(yaw) * point.z;
-    rotated.y = point.y;
-
-    // Rotate around x-axis (pitch)
-    float tempY = rotated.y;
-    rotated.y = cosf(pitch) * tempY - sinf(pitch) * rotated.z;
-    rotated.z = sinf(pitch) * tempY + cosf(pitch) * rotated.z;
-
-    return rotated;
-}
 
 // Function to project 3D points to 2D points, considering the camera position and rotation
 void project(Camera camera, Vec3D point3D, int* x2D, int* y2D) {
@@ -279,6 +238,8 @@ void drawLine3D(Uint32* pixels, Camera camera, Vec3D p1, Vec3D p2, Uint32 color)
     }
 }
 
+
+
 // Function to move the camera in the direction it is facing
 void moveCamera(Camera* camera, float forward, float strafe, float vertical) {
     camera->position.y += vertical;
@@ -286,31 +247,81 @@ void moveCamera(Camera* camera, float forward, float strafe, float vertical) {
     camera->position.z += forward * cosf(camera->yaw) - strafe * sinf(camera->yaw);
 }
 
-// Function to render FPS counter
-void renderCounts(SDL_Renderer* renderer, TTF_Font* font, int fps, int particles) {
-    SDL_Color color = {255, 255, 255, 255}; // White color
-    char fpsText[30];
-    snprintf(fpsText, sizeof(fpsText), "FPS: %d Particles: %d", fps, particles);
-    
-    SDL_Surface* textSurface = TTF_RenderText_Solid(font, fpsText, color);
+// General-purpose function to draw text on the screen
+void drawText(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y, SDL_Color color) {
+    SDL_Surface* textSurface = TTF_RenderText_Solid(font, text, color);
     if (textSurface == NULL) {
         printf("Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError());
         return;
     }
-    
+
     SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
     if (textTexture == NULL) {
         printf("Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError());
         SDL_FreeSurface(textSurface);
         return;
     }
-    
-    SDL_Rect renderQuad = { 10, 10, textSurface->w, textSurface->h };
+
+    SDL_Rect renderQuad = { x, y, textSurface->w, textSurface->h };
     SDL_RenderCopy(renderer, textTexture, NULL, &renderQuad);
-    
+
     SDL_DestroyTexture(textTexture);
     SDL_FreeSurface(textSurface);
 }
+
+// Example usage in renderCounts function
+void renderCounts(SDL_Renderer* renderer, TTF_Font* font, int fps, int particles) {
+    SDL_Color color = {255, 255, 255, 255}; // White color
+    char fpsText[30];
+    snprintf(fpsText, sizeof(fpsText), "FPS: %d Particles: %d", fps, particles);
+
+    drawText(renderer, font, fpsText, 10, 10, color);
+}
+
+void drawBoxOutline(Uint32* pixels, int x, int y, int width, int height, Uint32 color, int thickness) {
+    // Draw top and bottom edges
+    for (int t = 0; t < thickness; t++) {
+        for (int i = x - t; i <= x + width + t; i++) {
+            if (y - t >= 0 && y - t < SCREEN_HEIGHT && i >= 0 && i < SCREEN_WIDTH)
+                pixels[(y - t) * SCREEN_WIDTH + i] = color;
+            if (y + height + t >= 0 && y + height + t < SCREEN_HEIGHT && i >= 0 && i < SCREEN_WIDTH)
+                pixels[(y + height + t) * SCREEN_WIDTH + i] = color;
+        }
+    }
+
+    // Draw left and right edges
+    for (int t = 0; t < thickness; t++) {
+        for (int i = y - t; i <= y + height + t; i++) {
+            if (x - t >= 0 && x - t < SCREEN_WIDTH && i >= 0 && i < SCREEN_HEIGHT)
+                pixels[i * SCREEN_WIDTH + (x - t)] = color;
+            if (x + width + t >= 0 && x + width + t < SCREEN_WIDTH && i >= 0 && i < SCREEN_HEIGHT)
+                pixels[i * SCREEN_WIDTH + (x + width + t)] = color;
+        }
+    }
+}
+
+
+void displayParticleInfo(SDL_Renderer* renderer, TTF_Font* font, Particle* particle, int x, int y) {
+    SDL_Color color = {255, 255, 255, 255}; // White color
+
+    // Prepare strings for each piece of particle information
+    char posText[60];
+    snprintf(posText, sizeof(posText), "Pos: (%.2f, %.2f, %.2f)", 
+             particle->position.x, particle->position.y, particle->position.z);
+
+    char velText[60];
+    snprintf(velText, sizeof(velText), "Vel: (%.2f, %.2f, %.2f)", 
+             particle->velocity.x, particle->velocity.y, particle->velocity.z);
+
+    char radiusText[40];
+    snprintf(radiusText, sizeof(radiusText), "Radius: %.2f", particle->radius);
+
+    // Draw each line of information
+    drawText(renderer, font, posText, x + 10 , y + 10, color);           // Position text at (x, y)
+    drawText(renderer, font, velText, x + 10, y + 40, color);      // Velocity text slightly below position
+    drawText(renderer, font, radiusText, x + 10, y + 70, color);   // Radius text slightly below velocity
+}
+
 
 void createParticle(Particle* particle, float velocity, Uint32 color){
 	particle->position = (Vec3D){rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f};
@@ -406,6 +417,13 @@ int main(int argc, char* args[]) {
     int particlesSpawned = 2;
     int numParticles = 10000;
 
+
+    int infoBoxWidth = 350;
+    int infoBoxHeight = 100;
+
+    int selectedParticle =1;
+
+    int cubeEdges = 12;
     Particle* particles = (Particle*)malloc(numParticles * sizeof(Particle));
 
     if (particles == NULL) {
@@ -460,6 +478,9 @@ int main(int argc, char* args[]) {
 		       	createParticle(&particles[particlesSpawned], 2.0f, generateRandomColor());
 			particlesSpawned++;
 		       	break;
+		    case SDLK_ESCAPE:
+			paused = !paused;
+			break;
 		}
             }
         }
@@ -470,14 +491,19 @@ int main(int argc, char* args[]) {
         Uint32 color = (255 << 24) | (255 << 16) | (255 << 8) | 255;  // White
        
 
-        int cubeEdges = 12;	
         for (int lineNumber = 0; lineNumber < cubeEdges; lineNumber++) {
             drawLine3D(pixels, camera, cubeVertices[edges[lineNumber][0]], cubeVertices[edges[lineNumber][1]], color);
         }
 
 	renderParticles(pixels, camera, particles, particlesSpawned);
-        updateParticles(particles, particlesSpawned, 0.016f);
-        
+
+         if (selectedParticle != -1) {
+                drawBoxOutline(pixels, SCREEN_WIDTH-infoBoxWidth -10, 10, infoBoxWidth, infoBoxHeight, particles[selectedParticle].color, 5);
+        }
+
+	if(!paused){
+		updateParticles(particles, particlesSpawned, 0.016f);
+	}
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_RenderCopy(renderer, texture, NULL, NULL);
       
@@ -491,7 +517,14 @@ int main(int argc, char* args[]) {
             lastTime = endTime;
 	}
 	renderCounts(renderer, font, fps, particlesSpawned);
-        
+      
+
+// for some reason text must go later	
+	if (selectedParticle != -1) {
+                displayParticleInfo(renderer, font, &particles[selectedParticle], SCREEN_WIDTH-infoBoxWidth -10, 10);
+        }
+
+
         SDL_RenderPresent(renderer);
 
         SDL_Delay(16);
