@@ -332,6 +332,24 @@ void createParticle(Particle* particle, float velocity, Uint32 color){
 	particle->next = NULL;
 }
 
+void addParticle(Particle** head, Particle* newParticle) {
+    if (*head == NULL) {
+        *head = newParticle;
+        newParticle->next = newParticle;
+    } else {
+        Particle* current = *head;
+
+        while (current->next != *head) {
+            current = current->next;
+        }
+
+        current->next = newParticle;
+
+        newParticle->next = *head;
+
+    }
+}
+
 
 int main(int argc, char* args[]) {
     // Initialize SDL
@@ -426,6 +444,8 @@ int main(int argc, char* args[]) {
     int cubeEdges = 12;
     Particle* particles = (Particle*)malloc(numParticles * sizeof(Particle));
 
+
+
     if (particles == NULL) {
     fprintf(stderr, "Memory allocation failed!\n");
     return 1;
@@ -442,6 +462,7 @@ int main(int argc, char* args[]) {
 
     Particle* selectedParticle = &particles[0];
 
+    Particle* head = &particles[0];
     // Main loop
     while (!quit) {
         startTime = SDL_GetTicks();
@@ -483,6 +504,7 @@ int main(int argc, char* args[]) {
 			break;
 	            case SDLK_p:  // Spawn particle
 		       	createParticle(&particles[particlesSpawned], 2.0f, generateRandomColor());
+			addParticle(&head, &particles[particlesSpawned]);
 			particlesSpawned++;
 		       	break;
 		    case SDLK_ESCAPE:
