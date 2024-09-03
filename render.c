@@ -239,7 +239,9 @@ void drawLine3D(Uint32* pixels, Camera camera, Vec3D p1, Vec3D p2, Uint32 color)
     }
 }
 
-
+float generateRandomFloat() {
+    return (float)rand() / (float)RAND_MAX;
+}
 
 // Function to move the camera in the direction it is facing
 void moveCamera(Camera* camera, float forward, float strafe, float vertical) {
@@ -273,10 +275,13 @@ void drawText(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, i
 // Example usage in renderCounts function
 void renderCounts(SDL_Renderer* renderer, TTF_Font* font, int fps, int particles) {
     SDL_Color color = {255, 255, 255, 255}; // White color
-    char fpsText[30];
-    snprintf(fpsText, sizeof(fpsText), "FPS: %d Particles: %d", fps, particles);
+    char fpsText[20];
+    char particleText[20];
+    snprintf(fpsText, sizeof(fpsText), "FPS: %d", fps);
+    snprintf(particleText, sizeof(particleText),"Particles: %d", particles);
 
     drawText(renderer, font, fpsText, 10, 10, color);
+    drawText(renderer, font, particleText, 10, 40, color);
 }
 
 void drawBoxOutline(Uint32* pixels, int x, int y, int width, int height, Uint32 color, int thickness) {
@@ -327,7 +332,7 @@ void displayParticleInfo(SDL_Renderer* renderer, TTF_Font* font, Particle partic
 void createParticle(Particle* particle, float velocity, Uint32 color){
 	particle->position = (Vec3D){rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f, rand() / (float)RAND_MAX - 0.5f};
         particle->velocity = (Vec3D){(rand() / (float)RAND_MAX - 0.5f) * velocity, (rand() / (float)RAND_MAX - 0.5f) * velocity, (rand() / (float)RAND_MAX - 0.5f) * velocity};
-        particle->radius = 0.1f;
+        particle->radius = generateRandomFloat()/10;
         particle->color = color;
 	particle->next = NULL;
 }
