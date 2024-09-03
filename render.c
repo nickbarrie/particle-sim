@@ -356,6 +356,35 @@ void addParticle(Particle** head, Particle* newParticle) {
 }
 
 
+Particle* handleMouseClick(int mouseX, int mouseY, Particle* particles, int numParticles, Camera camera) {
+    Particle* currentParticle = NULL; // Initialize to NULL
+
+    for (int i = 0; i < numParticles; i++) {
+        int x2D, y2D;
+        project(camera, particles[i].position, &x2D, &y2D);
+
+        // Adjust radius based on the distance from the camera
+        float distance = sqrtf(
+            (particles[i].position.x - camera.position.x) * (particles[i].position.x - camera.position.x) +
+            (particles[i].position.y - camera.position.y) * (particles[i].position.y - camera.position.y) +
+            (particles[i].position.z - camera.position.z) * (particles[i].position.z - camera.position.z)
+        );
+        int radius = (int)(20 / distance); // Scale the sphere size
+
+        // Check if the click is within the sphere
+        int dx = mouseX - x2D;
+        int dy = mouseY - y2D;
+        if (dx * dx + dy * dy <= radius * radius) {
+            currentParticle = &particles[i]; // Use address-of operator to return a pointer
+            return currentParticle; // Exit the loop once a particle is selected
+        }
+    }
+
+    return NULL; // Return NULL if no particle was selected
+}
+
+
+
 int main(int argc, char* args[]) {
     // Initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -518,10 +547,14 @@ int main(int argc, char* args[]) {
 		    case SDLK_n:
 			selectedParticle = selectedParticle->next;
 	                break;
-		}
             }
-        }
-
+	    }  else if (e.type == SDL_MOUSEBUTTONDOWN) {
+		    int mouseX, mouseY;
+	    	    SDL_GetMouseState(&mouseX, &mouseY);
+		    selectedParticle = handleMouseClick(mouseX, mouseY, particles, numParticles, camera);
+	    }
+       
+	}
         SDL_FillRect(surface, NULL, 0x00000000);
 
 
