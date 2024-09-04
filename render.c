@@ -8,9 +8,9 @@
 #include "vector.h"
 
 // Screen dimensions
-const int SCREEN_WIDTH = 640;
-const int SCREEN_HEIGHT = 480;
-const float viewportDistance = 2.0f;
+int SCREEN_WIDTH = 640;
+int SCREEN_HEIGHT = 480;
+const float viewportDistance = 1.0f;
 bool paused = false;
 
 
@@ -196,7 +196,7 @@ void renderParticles(Uint32* pixels, Camera camera, Particle* particles, int num
             );
             // Adjust the sphere size based on distance
             // Here, we assume a base size and scale it with distance.
-            float scaleFactor = viewportDistance*200/  (distance + 0.5f * viewportDistance); // +0.1f to avoid division by zero
+            float scaleFactor = viewportDistance*SCREEN_HEIGHT/2 /  (distance  + 0.1f * viewportDistance); // +0.1f to avoid division by zero
 
             int radius = (int)(particles[i].radius * scaleFactor); // Scale radius by distance
 //	    if (radius < 5) radius = 5;  // Minimum radius
@@ -382,12 +382,12 @@ int main(int argc, char* args[]) {
     }
 
     // Create window
-    SDL_Window* window = SDL_CreateWindow("3D Rendering with POV Camera Movement in SDL",
+    SDL_Window* window = SDL_CreateWindow("3D Rendering of Particles in a cube",
                                           SDL_WINDOWPOS_UNDEFINED,
                                           SDL_WINDOWPOS_UNDEFINED,
                                           SCREEN_WIDTH,
                                           SCREEN_HEIGHT,
-                                          SDL_WINDOW_SHOWN);
+                                          SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (window == NULL) {
         printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
         SDL_Quit();
@@ -544,6 +544,17 @@ int main(int argc, char* args[]) {
 	    	    SDL_GetMouseState(&mouseX, &mouseY);
 		    selectedParticle = handleMouseClick(mouseX, mouseY, particles, numParticles, camera);
 	    }
+
+	  else if (e.type == SDL_WINDOWEVENT) {
+            if (e.window.event == SDL_WINDOWEVENT_RESIZED) {
+                SCREEN_WIDTH = e.window.data1;
+                SCREEN_HEIGHT = e.window.data2;
+
+		surface = SDL_GetWindowSurface(window);
+
+                pixels = (Uint32*)surface->pixels;
+            }
+        }
 
 	
         }
