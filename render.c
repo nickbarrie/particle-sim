@@ -5,36 +5,52 @@
 #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
 #include <stdint.h> 
-#include "vector.h"
 
-
+// Screen dimensions
 const int SCREEN_WIDTH = 640;
 const int SCREEN_HEIGHT = 480;
 const float viewportDistance = 2.0f;
-bool paused = false;
 
+// Define a light source direction (normalized)
+Vec3D lightDir = {0.0f, 1.0f, -1.0f}; // Example: light coming from above and behind
+float lightIntensity = 1.0f; // Maximum light intensity
 
+// Structure to represent a 3D point
+typedef struct {
+    float x, y, z;
+} Vec3D;
+
+// Structure to represent a camera
 typedef struct {
     Vec3D position;
     float pitch;  // Rotation around x-axis
     float yaw;    // Rotation around y-axis
 } Camera;
-
+// Define the structure for a particle
 typedef struct {
     Vec3D position;
     Vec3D velocity;
     Uint32 color;
     float radius;
-    struct Particle* next;
 } Particle;
 
-Vec3D lightDir = {0.0f, -1.0f, 1.0f}; // Example: light coming from above and infront
-float lightIntensity = 1.0f; // Maximum light intensity
+
+// Function to perform orthogonal projection of vector 'a' onto vector 'b'
+Vec3D orthogonalProjection(Vec3D a, Vec3D b) {
+    float bLengthSquared = b.x * b.x + b.y * b.y + b.z * b.z;
+    float dotProduct = a.x * b.x + a.y * b.y + a.z * b.z;
+    Vec3D projection = {
+        (dotProduct / bLengthSquared) * b.x,
+        (dotProduct / bLengthSquared) * b.y,
+        (dotProduct / bLengthSquared) * b.z
+    };
+    return projection;
+}
 
 Uint32 generateRandomColor() {
-    Uint8 red = rand() % 256;    
-    Uint8 green = rand() % 256;  
-    Uint8 blue = rand() % 256;  
+    Uint8 red = rand() % 256;    // Random value between 0 and 255
+    Uint8 green = rand() % 256;  // Random value between 0 and 255
+    Uint8 blue = rand() % 256;   // Random value between 0 and 255
 
     // Combine the components into a single Uint32 color value (assuming an ARGB format with Alpha = 0xFF)
     Uint32 color = (0xFF << 24) | (red << 16) | (green << 8) | blue;
@@ -42,6 +58,19 @@ Uint32 generateRandomColor() {
     return color;
 }
 
+// Function to subtract vector 'b' from vector 'a'
+Vec3D subVector(Vec3D a, Vec3D b) {
+    Vec3D result = { a.x - b.x, a.y - b.y, a.z - b.z };
+    return result;
+}
+
+// Function to add  vector 'b' to  vector 'a'
+Vec3D addVector(Vec3D a, Vec3D b) {
+    Vec3D result = { a.x + b.x, a.y +  b.y, a.z + b.z };
+    return result;
+}
+
+// Function to handle collision between two particles
 void handleParticleCollision(Particle* p1, Particle* p2) {
     // Calculate the vector between the centers of the two particles
     Vec3D collisionDirection = {
@@ -51,12 +80,12 @@ void handleParticleCollision(Particle* p1, Particle* p2) {
     };
 
     // Calculate the distance squared between the two particles
-    float distanceSquared =
+    float distanceSquared = 
         collisionDirection.x * collisionDirection.x +
         collisionDirection.y * collisionDirection.y +
         collisionDirection.z * collisionDirection.z;
 
-    // Calculate the sum of the radii squared
+    // Calculate the sum of the radii squared (assuming radius = 0.1 for both particles)
     float radiusSum = p1->radius + p2->radius;
     float radiusSumSquared = radiusSum * radiusSum;
 
@@ -70,15 +99,6 @@ void handleParticleCollision(Particle* p1, Particle* p2) {
             collisionDirection.z / distance
         };
 
-        // Calculate overlap and separate the particles
-        float overlap = radiusSum - distance;
-        p1->position.x -= normalizedCollisionDirection.x * overlap * 0.5f;
-        p1->position.y -= normalizedCollisionDirection.y * overlap * 0.5f;
-        p1->position.z -= normalizedCollisionDirection.z * overlap * 0.5f;
-        p2->position.x += normalizedCollisionDirection.x * overlap * 0.5f;
-        p2->position.y += normalizedCollisionDirection.y * overlap * 0.5f;
-        p2->position.z += normalizedCollisionDirection.z * overlap * 0.5f;
-
         // Project velocities onto the collision direction
         Vec3D w1 = orthogonalProjection(p1->velocity, normalizedCollisionDirection);
         Vec3D w2 = orthogonalProjection(p2->velocity, normalizedCollisionDirection);
@@ -86,26 +106,6 @@ void handleParticleCollision(Particle* p1, Particle* p2) {
         Vec3D u2 = subVector(p2->velocity, w2);
 
         // Swap the velocities along the collision direction
-        p1->velocity = addVector(u1, w2);
-        p2->velocity = addVector(u2, w1);
-    }
-}
-
-void updateParticles(Particle* particles, int numParticles, float deltaTime) {
-    for (int i = 0; i < numParticles; i++) {
-        // Update position based on velocity
-        particles[i].position.x += particles[i].velocity.x * deltaTime;
-        particles[i].position.y += particles[i].velocity.y * deltaTime;
-        particles[i].position.z += particles[i].velocity.z * deltaTime;
-
-        // Handle particle collisions
-        for (int j = i + 1; j < numParticles; j++) {
-            handleParticleCollision(&particles[i], &particles[j]);
-        }
-
-        // Check for collision with cube walls and bounce
-        if (particles[i].position.x <= -0.5f) {
-            particles[i].position.x = -0.5f;
             particles[i].velocity.x *= -1.0f;
         } else if (particles[i].position.x >= 0.5f) {
             particles[i].position.x = 0.5f;
@@ -484,128 +484,4 @@ int main(int argc, char* args[]) {
     fprintf(stderr, "Memory allocation failed!\n");
     return 1;
     }
-
-    for (int i = 0; i <  particlesSpawned; i++) {
-	    createParticle(&particles[i], 2.0f, generateRandomColor());
-        if (i > 0) {
-            particles[i-1].next = &particles[i];
-        }
-    } 
-
-    particles[particlesSpawned-1].next =  &particles[0];
-
-    Particle* selectedParticle = &particles[0];
-
-    Particle* head = &particles[0];
-    // Main loop
-    while (!quit) {
-        startTime = SDL_GetTicks();
-      
-      	while (SDL_PollEvent(&e) != 0) {
-            if (e.type == SDL_QUIT) {
-                quit = 1;
-            } else if (e.type == SDL_KEYDOWN) {
-                switch (e.key.keysym.sym) {
-                    case SDLK_LEFT:
-                        camera.yaw -= 0.1f;  // Rotate left
-                        break;
-                    case SDLK_RIGHT:
-                        camera.yaw += 0.1f;  // Rotate right
-                        break;
-                    case SDLK_UP:
-                        camera.pitch -= 0.1f;  // Rotate up
-                        break;
-                    case SDLK_DOWN:
-                        camera.pitch += 0.1f;  // Rotate down
-                        break;
-                    case SDLK_w:
-                        moveCamera(&camera, 0.1f, 0.0f, 0.0f);  // Move forward
-                        break;
-                    case SDLK_s:
-                        moveCamera(&camera, -0.1f, 0.0f,0.0f);  // Move backward
-                        break;
-                    case SDLK_a:
-                        moveCamera(&camera, 0.0f, -0.1f, 0.0f);  // Strafe left
-                        break;
-                    case SDLK_d:
-                        moveCamera(&camera, 0.0f, 0.1f, 0.0f);  // Strafe right
-                        break;
-		    case SDLK_SPACE:
-			moveCamera(&camera, 0.0f,0.0f, -0.1f);  // Move up
-			break;
-		    case SDLK_z:
-			moveCamera(&camera, 0.0f, 0.0f, 0.1f);  // Move down
-			break;
-	            case SDLK_p:  // Spawn particle
-		       	createParticle(&particles[particlesSpawned], 2.0f, generateRandomColor());
-			addParticle(&head, &particles[particlesSpawned]);
-			particlesSpawned++;
-		       	break;
-		    case SDLK_ESCAPE:
-			paused = !paused;
-			break;
-		    case SDLK_n:
-			selectedParticle = selectedParticle->next;
-	                break;
-            }
-	    }  else if (e.type == SDL_MOUSEBUTTONDOWN) {
-		    int mouseX, mouseY;
-	    	    SDL_GetMouseState(&mouseX, &mouseY);
-		    selectedParticle = handleMouseClick(mouseX, mouseY, particles, numParticles, camera);
-	    }
-       
-	}
-        SDL_FillRect(surface, NULL, 0x00000000);
-
-
-        Uint32 color = (255 << 24) | (255 << 16) | (255 << 8) | 255;  // White
-       
-
-        for (int lineNumber = 0; lineNumber < cubeEdges; lineNumber++) {
-            drawLine3D(pixels, camera, cubeVertices[edges[lineNumber][0]], cubeVertices[edges[lineNumber][1]], color);
-        }
-
-	renderParticles(pixels, camera, particles, particlesSpawned);
-
-         if (selectedParticle->next != NULL) {
-                drawBoxOutline(pixels, SCREEN_WIDTH-infoBoxWidth -10, 10, infoBoxWidth, infoBoxHeight, selectedParticle->color, 5);
-        }
-
-	if(!paused){
-		updateParticles(particles, particlesSpawned, 0.016f);
-	}
-        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-        SDL_RenderCopy(renderer, texture, NULL, NULL);
-      
-        SDL_DestroyTexture(texture);
-
-	frameCount++;
-        endTime = SDL_GetTicks();
-        if (endTime - lastTime >= 1000) {
-            fps = frameCount;
-            frameCount = 0;
-            lastTime = endTime;
-	}
-	renderCounts(renderer, font, fps, particlesSpawned);
-      
-
-// for some reason text must go later	
-	if (selectedParticle->next != NULL) {
-                displayParticleInfo(renderer, font, *selectedParticle, SCREEN_WIDTH-infoBoxWidth -10, 10);
-        }
-
-
-        SDL_RenderPresent(renderer);
-
-        SDL_Delay(16);
-    }
-
-    TTF_CloseFont(font);
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    TTF_Quit();
-    SDL_Quit();
-    free(particles);
-    return 0;
-}
 
