@@ -43,3 +43,7 @@ Vec3D rotate(Vec3D point, float pitch, float yaw) {
 
     return rotated;
 }
+
+float magnitudeVec3D(Vec3D v) {
+    return sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}

@@ -12,7 +12,7 @@ int SCREEN_WIDTH = 640;
 int SCREEN_HEIGHT = 480;
 const float viewportDistance = 1.0f;
 bool paused = false;
-
+float  gravity = 0.0f;
 
 Vec3D lightDir = {0.0f,-1.0f, 1.0f}; // Example: light coming from above and behind
 float lightIntensity = 1.0f; // Maximum light intensity
@@ -97,6 +97,11 @@ void updateParticles(Particle* particles, int numParticles, float deltaTime) {
         for (int j = i + 1; j < numParticles; j++) {
             handleParticleCollision(&particles[i], &particles[j]);
         }
+
+
+	if(particles[i].position.y <= 0.5f){
+            particles[i].velocity.y += gravity;
+	}
         // Check for collision with cube walls and bounce
         if (particles[i].position.x <= -0.5f) {
             particles[i].position.x = -0.5f;
@@ -304,17 +309,25 @@ void displayParticleInfo(SDL_Renderer* renderer, TTF_Font* font, Particle partic
     snprintf(posText, sizeof(posText), "Pos: (%.2f, %.2f, %.2f)", 
              particle.position.x, particle.position.y, particle.position.z);
 
-    char velText[60];
-    snprintf(velText, sizeof(velText), "Vel: (%.2f, %.2f, %.2f)", 
+    char velocityComponentText[60]; 
+    snprintf(velocityComponentText, sizeof(velocityComponentText), "Velocity comp. (X, Y, Z)"); 
+
+    char componentVelocityText[60];
+    snprintf(componentVelocityText, sizeof(componentVelocityText), "(%.2f, %.2f, %.2f)", 
              particle.velocity.x, particle.velocity.y, particle.velocity.z);
+
+    char velocityText[60];
+	    snprintf(velocityText, sizeof(velocityText), "Velocity: (%.2f)", magnitudeVec3D(particle.velocity));
 
     char radiusText[40];
     snprintf(radiusText, sizeof(radiusText), "Radius: %.2f", particle.radius);
 
     // Draw each line of information
-    drawText(renderer, font, posText, x + 10 , y + 10, color);           // Position text at (x, y)
-    drawText(renderer, font, velText, x + 10, y + 40, color);      // Velocity text slightly below position
-    drawText(renderer, font, radiusText, x + 10, y + 70, color);   // Radius text slightly below velocity
+    drawText(renderer, font, posText, x + 10 , y + 10, color);           
+    drawText(renderer, font, velocityComponentText, x + 10, y + 40, color);      
+    drawText(renderer, font, componentVelocityText, x + 10, y + 70, color);
+    drawText(renderer, font,velocityText, x + 10, y + 100, color);      
+    drawText(renderer, font, radiusText, x + 10, y + 130, color);   
 }
 
 
@@ -462,9 +475,12 @@ int main(int argc, char* args[]) {
 
 
     int infoBoxWidth = 350;
-    int infoBoxHeight = 100;
+    int infoBoxHeight = 160;
 
     int cubeEdges = 12;
+
+    Uint32 startTicks, endTicks;
+
     Particle* particles = (Particle*)malloc(numParticles * sizeof(Particle));
 
 
@@ -526,6 +542,14 @@ int main(int argc, char* args[]) {
 		    case SDLK_z:
 			moveCamera(&camera, 0.0f, 0.0f, 0.1f);  // Move down
 			break;
+		    case SDLK_g:
+			if(gravity == 0.0f){
+			    gravity = 0.1f;
+			}
+			else {
+		            gravity = 0.0f;
+			}
+                        break;			
 	            case SDLK_p:  // Spawn particle
 		       	createParticle(&particles[particlesSpawned], 2.0f, generateRandomColor());
 			addParticle(&head, &particles[particlesSpawned]);
@@ -569,14 +593,22 @@ int main(int argc, char* args[]) {
             drawLine3D(pixels, camera, cubeVertices[edges[lineNumber][0]], cubeVertices[edges[lineNumber][1]], color);
         }
 
+
+//	startTicks = SDL_GetTicks();
 	renderParticles(pixels, camera, particles, particlesSpawned);
+
+//	endTicks = SDL_GetTicks();
+//	printf("Rendering took %d ms\n", endTicks - startTicks);
 
          if (selectedParticle->next != NULL) {
                 drawBoxOutline(pixels, SCREEN_WIDTH-infoBoxWidth -10, 10, infoBoxWidth, infoBoxHeight, selectedParticle->color, 5);
         }
 
 	if(!paused){
+//		startTicks = SDL_GetTicks();
 		updateParticles(particles, particlesSpawned, 0.016f);
+//		endTicks = SDL_GetTicks();
+//		printf("Physics update took %d ms\n", endTicks - startTicks);
 	}
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         SDL_RenderCopy(renderer, texture, NULL, NULL);
